@@ -54,6 +54,20 @@ func NewNetDev(name string, interval time.Duration, opts ...netDevOpts) (*netDev
 	return t, nil
 }
 
+// WithPath 设置网络设备文件路径
+func WithPath(path string) netDevOpts {
+	return func(t *netDev) {
+		t.args.Path = path
+	}
+}
+
+// WithCallback 设置回调函数
+func WithCallback(callback func(data TsCallData)) netDevOpts {
+	return func(t *netDev) {
+		t.args.Callback = callback
+	}
+}
+
 // Close 关闭netDev并停止所有goroutine
 func (t *netDev) Close() {
 	close(t.done)
