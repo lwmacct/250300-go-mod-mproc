@@ -1,8 +1,12 @@
 version: "3"
 
 vars:
+  PATH_LOCAL: ".local"
+  PATH_BIN: "{{.PATH_LOCAL}}/bin"
+  PATH_DATA: "{{.PATH_LOCAL}}/data"
+
   GO_MODE_NAME:
-    sh: go mod edit -json | jq -r .Module.Path
+    sh: go mod edit -json 2>/dev/null | jq -r .Module.Path|| echo "{{.GO_MODE_NAME}}"
   GO_MODE_PROJ:
     sh: echo "{{.GO_MODE_NAME}}" | awk -F/ '{print $NF}'
   GO_MODE_APP:
@@ -16,16 +20,10 @@ vars:
     -X '{{.GO_MODE_NAME}}/app/version.GitCommit={{.GIT_COMMIT}}'
     -X '{{.GO_MODE_NAME}}/app/version.BuildTime={{.TIME_NOW}}'
     -X '{{.GO_MODE_NAME}}/app/version.Developer={{.DEVELOPER}}'
-    -X '{{.GO_MODE_NAME}}/app/version.Workspace={{.PATH_FULL}}'
+    -X '{{.GO_MODE_NAME}}/app/version.Workspace={{.PATH_REALPATH}}'
   GO_BUILD_LDFLAGS: "{{.GO_BUILD_LDFLAGS_SW}} {{.GO_BUILD_LDFLAGS_X}}"
 
 tasks:
-  default:
-    desc: "golang 的命令行工具"
-    cmds:
-      - echo "golang 的命令行工具"
-      - echo
-      - task: env
   env:
     desc: "显示环境变量"
     silent: true
@@ -36,15 +34,14 @@ tasks:
         echo "GO_MODE_APP: {{.GO_MODE_APP}}"
         echo "GO_BUILD_LDFLAGS_SW: {{.GO_BUILD_LDFLAGS_SW}}"
         echo "GO_BUILD_LDFLAGS_X: {{.GO_BUILD_LDFLAGS_X}}"
-  build:
-    desc: "编译发布所有架构"
-    deps:
-      - task: build:release:x86_64
-    cmds:
-      - echo "编译发布所有架构"
 
-  build:release:x86_64:
-    desc: Build the project for x86_64
+  release:
+    desc: "发布所有架构"
+    deps:
+      - task: release:x86_64
+
+  release:x86_64:
+    desc: "发布 x86_64 架构"
     vars:
       ARCH: "x86_64"
       VERSION: "{{.GIT_TAG_LATEST}}-{{.ARCH}}"
@@ -82,36 +79,12 @@ tasks:
         docker tag {{.IMAGE}} {{.REGISTRY}}/{{.IMAGE}}
         docker push {{.REGISTRY}}/{{.IMAGE}}
 
-  build:debug:bin:
+  run:cli:
+    desc: "先编译再运行"
     silent: true
-    desc: "编译调试版本"
+    aliases: [run]
     cmds:
       - go build -ldflags "{{.GO_BUILD_LDFLAGS_X}}" -o {{.GO_BUILD_PATH}} .
-
-  run:test:run:
-    desc: "运行 App 命令行"
-    silent: true
-    deps:
-      - task: build:debug:bin
-    vars:
-      STDIN: "Stdin"
-    cmds:
       - |
         export ACF_SHOW_TEST=1
-        echo '{{.STDIN}}' | {{.GO_BUILD_PATH}} test run
-
-
-  run:start:run:
-    desc: "运行 App 命令行"
-    silent: true
-    deps:
-      - task: build:debug:bin
-    vars:
-      SUBCMD: "start run"
-    cmds:
-      - |
-        {{.GO_BUILD_PATH}} {{.SUBCMD}} --help | grep '\--'  |  tr '-' '_' | tr '[:lower:]' '[:upper:]' | sed 's/__/ACF_/g'
-        {{.GO_BUILD_PATH}} {{.SUBCMD}} --help 
-        export ACF_SHOW_TEST=1
-        # env | grep ACF_ # 有敏感信息时请勿使用
-        echo "Stdin" | {{.GO_BUILD_PATH}} {{.SUBCMD}}
+        {{.GO_BUILD_PATH}} {{.CLI_ARGS}}
